@@ -7,18 +7,25 @@
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
+#include <stdint.h>
+#include <stdio.h>
 
 void initUART57600(void);
 void writeUART(char caracter);
 void writeTextUART(char* texto);
+void showMenu(void);
+void init_ADC(void);
 
 volatile char bufferRX;
+volatile uint8_t bandera_lectura = 0;
+volatile uint8_t valor_pot = 0;
 
 int main(void)
 {
     initUART57600();
 	DDRD |= 0xFC;
 	DDRB |= 0x03;
+	init_ADC();
 	sei();
 	
 	/*writeUART('H');
@@ -35,14 +42,35 @@ int main(void)
 	//writeUART('\n');
 	writeUART(10);
 	writeUART(13);*/
-	writeTextUART("Hola Mundo aaaaa");
+	//writeTextUART("Hola Mundo aaaaa");
 	
-	PORTD |= 0xFC;
-	PORTB |= 0x03;
+	PORTD &= ~(0xFC);
+	PORTB &= ~(0x03);
 	
     while (1) 
     {
-		
+		showMenu();
+		while (bandera_lectura == 0)
+		;
+		bandera_lectura = 0;
+		if (bufferRX == '1'){
+			char str_valor_pot[5];
+			sprintf(str_valor_pot, "%d", valor_pot);
+			writeTextUART(str_valor_pot);
+		} else if (bufferRX == '2') {
+			writeTextUART("Escriba el valor ASCII a mandar: ");
+			writeTextUART("");
+			while (bandera_lectura == 0)
+			;
+			bandera_lectura = 0;
+			while (!(UCSR0A & (1<<UDRE0)));
+			UDR0 = bufferRX;
+			PORTD = (bufferRX<<2) & 0xFC;
+			PORTB = (bufferRX>>6) & 0x03;
+			
+		} else {
+			writeTextUART("Valor inválido, por favor aprenda a seguir instrucciones");	
+		}
     }
 }
 
@@ -83,13 +111,52 @@ void writeTextUART(char* texto){
 	writeUART(13);
 }
 
+void showMenu(void){
+	writeTextUART("");
+	writeTextUART("Escriba el número correspondiente a la acción a ejecutar:");
+	writeTextUART("");
+	writeTextUART("1. Leer potenciómetro");
+	writeTextUART("");
+	writeTextUART("2. Enviar ASCII");
+	writeTextUART("");
+}
+
+void init_ADC(void){
+	ADMUX = 0;
+	
+	ADMUX |= (1<<REFS0);
+	
+	ADMUX |= (1<<ADLAR);
+	
+	ADMUX |= 0x07;
+	
+	ADCSRA = 0;
+	
+	ADCSRA = (1<<ADEN);
+	
+	ADCSRA |= (1<<ADATE);
+	
+	ADCSRA |= (1<<ADIE);
+	
+	ADCSRA |= (1<<ADPS2) | (1<<ADPS1) | (1<<ADPS0);
+	
+	ADCSRB = 0;
+	
+	ADCSRA |= (1<<ADSC);
+}
+
 ISR(USART_RX_vect){
+	bandera_lectura = 1;
 	bufferRX = UDR0;
 	
-	while (!(UCSR0A & (1<<UDRE0)));
-	UDR0 = bufferRX;
+	//while (!(UCSR0A & (1<<UDRE0)));
+	//UDR0 = bufferRX;
 	
-	PORTD = (bufferRX<<2) & 0xFC;
-	PORTB = (bufferRX>>6) & 0x03;
+	/*PORTD = (bufferRX<<2) & 0xFC;
+	PORTB = (bufferRX>>6) & 0x03;*/
 	
+}
+
+ISR(ADC_vect){
+	valor_pot = ADCH;
 }
